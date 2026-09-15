@@ -309,6 +309,89 @@
     background:var(--bg);
   }
 
+  /* PDF export modal */
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.5);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:100;
+    padding:16px;
+  }
+  .modal-overlay[hidden]{display:none;}
+  .modal-box{
+    background:var(--panel);
+    border:1px solid var(--panel-border);
+    border-radius:14px;
+    padding:24px;
+    width:100%;
+    max-width:380px;
+    box-shadow:0 20px 60px var(--shadow);
+  }
+  .modal-box h2{
+    margin:0 0 8px;
+    font-size:17px;
+    color:var(--ink);
+  }
+  .modal-box p{
+    margin:0 0 18px;
+    font-size:13px;
+    color:var(--muted);
+    line-height:1.5;
+  }
+  .modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+  }
+  .modal-btn{
+    border:1px solid var(--panel-border);
+    background:transparent;
+    color:var(--ink);
+    border-radius:8px;
+    padding:9px 16px;
+    font-size:13px;
+    cursor:pointer;
+  }
+  .modal-btn.primary{
+    background:var(--accent);
+    border-color:var(--accent);
+    color:#fff;
+  }
+  .modal-btn:disabled{opacity:.5;cursor:default;}
+  .modal-progress-wrap{
+    margin-bottom:16px;
+    display:none;
+  }
+  .modal-progress-wrap.show{display:block;}
+  .modal-progress-bar{
+    height:6px;
+    background:var(--panel-border);
+    border-radius:3px;
+    overflow:hidden;
+  }
+  .modal-progress-fill{
+    height:100%;
+    width:0%;
+    background:var(--accent);
+    transition:width .2s;
+  }
+  .modal-progress-text{
+    margin-top:6px;
+    font-size:12px;
+    color:var(--muted);
+    text-align:center;
+  }
+  .modal-done-icon{
+    font-size:32px;
+    text-align:center;
+    margin-bottom:8px;
+    display:none;
+  }
+  .modal-done-icon.show{display:block;}
+
   @media (max-width:700px){
     .book{max-width:94vw;}
     header h1{font-size:14px;}
@@ -322,6 +405,7 @@
       <div class="sub">2025 TR-27 · 교육부</div>
     </div>
     <div style="display:flex; gap:8px;">
+      <button class="icon-btn" id="pdfBtn" title="PDF로 저장">📄</button>
       <button class="icon-btn" id="themeBtn" title="테마 전환">🌓</button>
       <button class="icon-btn" id="fsBtn" title="전체화면">⛶</button>
     </div>
@@ -355,6 +439,23 @@
   <div class="hint">페이지 모서리를 클릭하거나 ← → 키, 스와이프로 넘겨보세요 · 확대 버튼/더블클릭/핀치로 글씨를 크게 볼 수 있어요</div>
 </div>
 
+<div class="modal-overlay" id="pdfModal" hidden>
+  <div class="modal-box">
+    <h2 id="pdfModalTitle">PDF로 저장</h2>
+    <p id="pdfModalDesc">전체 22페이지를 하나의 PDF 파일로 만들어 다운로드합니다. 페이지 수에 따라 잠시 시간이 걸릴 수 있어요.</p>
+    <div class="modal-done-icon" id="pdfDoneIcon">✅</div>
+    <div class="modal-progress-wrap" id="pdfProgressWrap">
+      <div class="modal-progress-bar"><div class="modal-progress-fill" id="pdfProgressFill"></div></div>
+      <div class="modal-progress-text" id="pdfProgressText">0 / 22 페이지 처리 중…</div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" id="pdfCancelBtn">닫기</button>
+      <button class="modal-btn primary" id="pdfStartBtn">PDF 만들기</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 (function(){
   var TOTAL = 22;
@@ -646,6 +747,107 @@
     } else {
       (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
     }
+  });
+
+  // ---- PDF export modal ----
+  var pdfBtn = document.getElementById('pdfBtn');
+  var pdfModal = document.getElementById('pdfModal');
+  var pdfCancelBtn = document.getElementById('pdfCancelBtn');
+  var pdfStartBtn = document.getElementById('pdfStartBtn');
+  var pdfProgressWrap = document.getElementById('pdfProgressWrap');
+  var pdfProgressFill = document.getElementById('pdfProgressFill');
+  var pdfProgressText = document.getElementById('pdfProgressText');
+  var pdfDoneIcon = document.getElementById('pdfDoneIcon');
+  var pdfModalTitle = document.getElementById('pdfModalTitle');
+  var pdfModalDesc = document.getElementById('pdfModalDesc');
+  var pdfGenerating = false;
+
+  function resetPdfModal(){
+    pdfProgressWrap.classList.remove('show');
+    pdfDoneIcon.classList.remove('show');
+    pdfProgressFill.style.width = '0%';
+    pdfProgressText.textContent = '0 / ' + TOTAL + ' 페이지 처리 중…';
+    pdfModalTitle.textContent = 'PDF로 저장';
+    pdfModalDesc.style.display = '';
+    pdfModalDesc.textContent = '전체 ' + TOTAL + '페이지를 하나의 PDF 파일로 만들어 다운로드합니다. 페이지 수에 따라 잠시 시간이 걸릴 수 있어요.';
+    pdfStartBtn.textContent = 'PDF 만들기';
+    pdfStartBtn.disabled = false;
+    pdfStartBtn.style.display = '';
+    pdfCancelBtn.textContent = '닫기';
+  }
+
+  pdfBtn.addEventListener('click', function(){
+    resetPdfModal();
+    pdfModal.hidden = false;
+  });
+  pdfCancelBtn.addEventListener('click', function(){
+    if(pdfGenerating) return;
+    pdfModal.hidden = true;
+  });
+  pdfModal.addEventListener('click', function(e){
+    if(e.target === pdfModal && !pdfGenerating) pdfModal.hidden = true;
+  });
+
+  function loadImageEl(src){
+    return new Promise(function(resolve, reject){
+      var img = new Image();
+      img.onload = function(){ resolve(img); };
+      img.onerror = reject;
+      img.src = src;
+    });
+  }
+
+  pdfStartBtn.addEventListener('click', function(){
+    if(pdfGenerating) return;
+    if(typeof window.jspdf === 'undefined'){
+      pdfModalDesc.textContent = 'PDF 기능을 불러오지 못했어요. 인터넷 연결을 확인하고 다시 시도해주세요.';
+      return;
+    }
+    pdfGenerating = true;
+    pdfStartBtn.disabled = true;
+    pdfCancelBtn.disabled = true;
+    pdfModalDesc.style.display = 'none';
+    pdfProgressWrap.classList.add('show');
+
+    var jsPDF = window.jspdf.jsPDF;
+    var doc = null;
+
+    (async function(){
+      try{
+        for(var i=0;i<TOTAL;i++){
+          var img = await loadImageEl(pages[i]);
+          var w = img.naturalWidth, h = img.naturalHeight;
+          var orientation = w>=h ? 'landscape' : 'portrait';
+          if(i===0){
+            doc = new jsPDF({ orientation: orientation, unit:'px', format:[w,h], compress:true });
+          } else {
+            doc.addPage([w,h], orientation);
+          }
+          doc.addImage(img, 'JPEG', 0, 0, w, h);
+          var pct = Math.round(((i+1)/TOTAL)*100);
+          pdfProgressFill.style.width = pct + '%';
+          pdfProgressText.textContent = (i+1) + ' / ' + TOTAL + ' 페이지 처리 중…';
+        }
+        doc.save('한국형_사회정서교육_교육과정.pdf');
+        pdfProgressWrap.classList.remove('show');
+        pdfDoneIcon.classList.add('show');
+        pdfModalTitle.textContent = '완료되었어요';
+        pdfModalDesc.style.display = '';
+        pdfModalDesc.textContent = 'PDF 다운로드가 시작됐어요. 다운로드 폴더를 확인해보세요.';
+        pdfStartBtn.style.display = 'none';
+        pdfCancelBtn.textContent = '확인';
+      } catch(err){
+        pdfProgressWrap.classList.remove('show');
+        pdfModalTitle.textContent = '오류가 발생했어요';
+        pdfModalDesc.style.display = '';
+        pdfModalDesc.textContent = 'PDF를 만드는 중 문제가 생겼어요. 다시 시도해주세요.';
+        pdfStartBtn.disabled = false;
+        pdfStartBtn.textContent = '다시 시도';
+      } finally {
+        pdfGenerating = false;
+        pdfCancelBtn.disabled = false;
+      }
+    })();
   });
 
   buildThumbs();
